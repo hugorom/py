@@ -12,15 +12,11 @@ import os
 from openpyxl import load_workbook
 from openpyxl.styles import numbers
 # Datos de conexión a la base de datos
-config = {
-    'user': 'disponibilidad',
-    'password': 'd_2024',
-    'host': '172.29.149.155',
-    'port': 3306,
-    'database': 'sihah'
-}
+config = {'user': 'disponibilidad', 'password': 'd_2024', 'host': '172.29.149.155', 'port': 3306, 'database': 'sihah'}
 # Lista de cadenas que deseas utilizar en la consulta
-estaciones = ['C26045']
+estaciones = ['SOLVC', 'NOGVC', 'MALVC', 'C30486', 'C30120', 'TUPVC', 'PRLVC', 'PTXVC', 'LOMAGRANDE', 'PTUXPANGO', 'ORIZABAob', 
+              'IFSANSEBASTIAN', 'PCRPB', 'LGRVC', 'X76737', 'C30309', 'C30299', 'C30274', 'C30212', 'C30100', 'C30042', 'C30004',
+              'C21161', 'C21160', 'C21159', 'C21158', 'C21053', 'C21039', 'C21020', 'ORZVC']
 
 try:
     conn = mariadb.connect(**config) # Conectar a la base de datos
@@ -32,7 +28,6 @@ try:
     cursor.execute(query, tuple(estaciones)) # Ejecutar la consulta
         
     resultados = cursor.fetchall() # Obtener los resultados
-    
     columnas = [desc[0] for desc in cursor.description] # Obtener los nombres de las columnas
     
     # Crear un DataFrame de pandas con los resultados
@@ -49,7 +44,7 @@ try:
     
     #print(df_pivot)
     ruta_carpeta = "C:\Z"  # Reemplaza con la ruta real
-    nombre_archivo = "Chivas2.xlsx"
+    nombre_archivo = "RB2_.xlsx"
 
     ruta_completa = os.path.join(ruta_carpeta, nombre_archivo)
     try:
@@ -59,15 +54,14 @@ try:
     except FileExistsError:
         print(f"La carpeta ya existe en {ruta_carpeta}")
 
-    
         # Crear la ruta completa del archivo
     df_pivot.to_excel(ruta_completa)
-    
-    
     df_analisis['year'] = df_analisis.index.year
     
     resultados_agrupa = pd.DataFrame()
     resultados_med = pd.DataFrame()
+    df_sums = pd.DataFrame()
+
     r_log = pd.DataFrame()
     r_log2 = pd.DataFrame()
     # Recorrer las columnas del DataFrame pivotado (excluyendo la columna 'year')
@@ -81,6 +75,23 @@ try:
                 resultados_agrupa = conteo_anual
             else:       
                 resultados_agrupa = pd.merge(resultados_agrupa, conteo_anual, on='year', how='outer')
+        
+    for col in df_analisis.columns:
+        if col != 'year':
+            # Agrupar por año y contar la cantidad de datos anuales
+            suma_ = df_analisis.groupby('year')[col].sum().reset_index()
+            suma_.columns = ['year', f'{col}_s']
+            conteo_anual = df_analisis.groupby('year')[col].count().reset_index()
+            conteo_anual.columns = ['year', f'{col}_n']
+            # Unir los resultados en el DataFrame de resultados
+            if df_sums.empty:
+                df_sums = suma_
+            else:       
+                df_sums = pd.merge(df_sums, suma_, on='year', how='outer')
+            
+            #df_sums = pd.merge(df_sums, conteo_anual, on='year', how='outer')
+
+    
     
     for col in df_analisis.columns:
         if col != 'year':
@@ -92,7 +103,6 @@ try:
             #suma_log.
             promedio_anual = df_analisis.groupby('year')[col].mean().reset_index()
             promedio_anual.columns = ['year', f'{col}_mean']
-
             promedio_anual[f'{col}_logs'] = suma_anual[f'{col}_sum'].apply(lambda x: np.log(x) if x > 0 else np.nan)
             
             if r_log.empty:
@@ -136,6 +146,8 @@ try:
     stats_cout.index = ['Count']
     stats_mean.index = ['Mean']
     stats_std.index = ['Std']
+
+    # resultados_med2 = pd.concat([resultados_med, stats_sum])
 
     resultados_med = pd.concat([resultados_med, stats_sum, stats_cout, stats_mean, stats_std])
     
@@ -183,7 +195,6 @@ try:
             # Obtener el valor en la posición (i, j) de df1 y df2
             valor_df1 = resultados_agrupa2.iloc[i, j]
             valor_df2 = res_compara_limites.iloc[i, j]
-            
             # Comparar los valores y asignar el valor correspondiente de df2 si ambos son mayores que 0 o nulos
             if valor_df1 > 350 and pd.notna(valor_df2):
                 valor_nuevo = valor_df2
@@ -204,8 +215,7 @@ try:
         df_pivot.to_excel(writer, sheet_name='Datos diarios')    
         resultados_agrupa.to_excel(writer, sheet_name='Agrupados anuales', index=False)
         resultados_med.to_excel(writer, sheet_name="Estadisticas_anuales", index=True)
-        stats_mean.to_excel(writer, sheet_name="Media", index=False)
-        promedio_anual.to_excel(writer, sheet_name="Media_2", index=False)
+        df_sums.to_excel(writer, sheet_name="suma", index=False)
         #r_log.to_excel(writer, sheet_name='LogN', index= True)
         res_compara_limites.to_excel(writer, sheet_name='Límites', index= True)
         resultados_comparacion.to_excel(writer, sheet_name='Líms_VS_añoscompletos', index= True)
